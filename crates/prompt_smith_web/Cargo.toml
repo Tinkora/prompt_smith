@@ -1,6 +1,6 @@
 [package]
 name = "prompt_smith_web"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.5"
 description = "Browser WebAssembly bridge for Prompt Smith"
 edition.workspace = true
 license.workspace = true
@@ -14,7 +14,7 @@ wasm-opt = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-prompt_smith_core = { version = "=0.1.0-alpha.3", path = "../prompt_smith_core" }
+prompt_smith_core = { version = "=0.1.0-alpha.5", path = "../prompt_smith_core" }
 serde.workspace = true
 wasm-bindgen.workspace = true
 serde_json.workspace = true
