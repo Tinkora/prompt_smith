@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-> 状态：`v0.1.0-alpha.2` 发布候选。实现与发布元数据对应日期为 2026-08-29 的
+> 状态：`v0.1.0-alpha.3` 发布候选。实现与发布元数据对应日期为 2026-08-29 的
 > Alpha；只有 CI、Pages、Release 资产、checksum、SBOM 和 attestations 全部
 > 验证后，公开发布才算完成。
 

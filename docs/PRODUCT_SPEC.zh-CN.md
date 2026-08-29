@@ -150,6 +150,6 @@ scripts/                   文档、浏览器和 Release 契约检查
 - 公开页面无需服务器即可完成编辑、检查、渲染全流程。
 - 公开声明与支持子集一致，不暗示完整框架兼容。
 - 英文 README/UI 为默认入口，并提供完整中文 README/规格链接。
-- Package 元数据与 Release notes 保持对应 `v0.1.0-alpha.2`；只有 CI、Pages、
+- Package 元数据与 Release notes 保持对应 `v0.1.0-alpha.3`；只有 CI、Pages、
   checksum、SBOM、provenance 和 SBOM attestation 从 Release 资产独立验证后，
   才将该 Alpha 记录为已发布。

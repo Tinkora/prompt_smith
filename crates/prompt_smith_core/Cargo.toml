@@ -1,6 +1,6 @@
 [package]
 name = "prompt_smith_core"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 description = "Strict prompt-template preflight and rendering core"
 edition.workspace = true
 license.workspace = true
