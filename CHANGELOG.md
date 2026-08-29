@@ -4,8 +4,6 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [Unreleased]
-
 ### Fixed
 
 - Honor the shared CI browser executable path for Playwright smoke tests.
