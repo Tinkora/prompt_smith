@@ -1,0 +1,394 @@
+name: Release
+
+'on':
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.ref_name }}
+
+jobs:
+  metadata:
+    name: Validate release metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - name: Check out tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust
+        run: rustup toolchain install 1.95.0 --profile minimal --no-self-update
+
+      - name: Validate release metadata
+        env:
+          RUSTUP_TOOLCHAIN: 1.95.0
+        run: bash scripts/validate_release.sh "${RELEASE_TAG}" . tag
+
+      - name: Export version
+        id: version
+        run: echo "value=${RELEASE_TAG#v}" >> "${GITHUB_OUTPUT}"
+
+  quality:
+    uses: ./.github/workflows/quality.yml
+    permissions:
+      contents: read
+
+  build:
+    name: Build deterministic release archives
+    needs: [metadata, quality]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - name: Check out tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: crates/prompt_smith_web/package-lock.json
+
+      - name: Install build dependencies
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --no-self-update
+          rustup target add wasm32-unknown-unknown --toolchain 1.95.0
+          cargo +1.95.0 install wasm-pack --version 0.15.0 --locked
+          npm --prefix crates/prompt_smith_web ci --ignore-scripts
+
+      - name: Build reviewed web distribution
+        env:
+          RUSTUP_TOOLCHAIN: 1.95.0
+        run: bash scripts/build_pages.sh
+
+      - name: Create deterministic archives
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          source_date_epoch="$(git show -s --format=%ct "${GITHUB_SHA}")"
+          web_root="prompt_smith-web-v${VERSION}"
+          source_root="prompt_smith-source-v${VERSION}"
+          mkdir -p candidate "staging/${web_root}"
+          cp -a dist/. "staging/${web_root}/"
+          git archive --format=tar --prefix="${source_root}/" "${GITHUB_SHA}" |
+            tar -xf - -C staging
+
+          if find staging \( -type l -o \( ! -type f ! -type d \) \) -print -quit | grep -q .; then
+            printf 'Release staging contains a symlink or special file.\n' >&2
+            exit 1
+          fi
+
+          for archive_root in "${web_root}" "${source_root}"; do
+            tar --sort=name \
+              --mtime="@${source_date_epoch}" \
+              --owner=0 --group=0 --numeric-owner \
+              --pax-option=delete=atime,delete=ctime \
+              -C staging -cf - "${archive_root}" |
+              gzip -n > "candidate/${archive_root}.tar.gz"
+          done
+          jq -n --arg version "${VERSION}" --arg commit "${GITHUB_SHA}" \
+            '{version: $version, commit: $commit}' > candidate/release-metadata.json
+          test -s "candidate/prompt_smith-web-v${VERSION}.tar.gz"
+          test -s "candidate/prompt_smith-source-v${VERSION}.tar.gz"
+
+      - name: Upload release source artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: prompt_smith_release_source_${{ github.run_id }}
+          path: candidate
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: true
+          retention-days: 7
+
+  candidate:
+    name: Generate release evidence
+    needs: [metadata, build]
+    uses: Tinkora/.github/.github/workflows/reusable-release.yml@92df6f4d1a1f4d66fe605a0d30a81f3c2994ef99
+    permissions:
+      contents: read
+    with:
+      source-artifact-name: prompt_smith_release_source_${{ github.run_id }}
+      version: ${{ needs.metadata.outputs.version }}
+      publish: false
+
+  attest:
+    name: Attest release archives and SBOM
+    needs: [metadata, candidate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+    steps:
+      - name: Download release candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ${{ needs.candidate.outputs.candidate-artifact-name }}
+          path: candidate
+
+      - name: Verify release evidence
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          (cd candidate && sha256sum --check --strict -- SHA256SUMS)
+          test -s "candidate/prompt_smith-web-v${VERSION}.tar.gz"
+          test -s "candidate/prompt_smith-source-v${VERSION}.tar.gz"
+          jq -e --arg version "${VERSION}" '
+            .spdxVersion == "SPDX-2.3" and
+            .packages[0].versionInfo == $version and
+            ([.files[].fileName] | sort) == [
+              "./prompt_smith-source-v" + $version + ".tar.gz",
+              "./prompt_smith-web-v" + $version + ".tar.gz"
+            ]
+          ' candidate/SBOM.spdx.json >/dev/null
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: candidate/*.tar.gz
+
+      - name: Attest SPDX SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: candidate/*.tar.gz
+          sbom-path: candidate/SBOM.spdx.json
+
+  publish:
+    name: Publish immutable release assets
+    needs: [metadata, quality, build, candidate, attest]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download release candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ${{ needs.candidate.outputs.candidate-artifact-name }}
+          path: candidate
+
+      - name: Verify remote tag commit before draft creation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object')"
+          outer_tag_type="$(jq -r '.type' <<< "${tag_object}")"
+          if [[ "${outer_tag_type}" != "tag" ]]; then
+            printf 'Remote release tag must remain annotated.\n' >&2
+            exit 1
+          fi
+          tag_type="$(jq -r '.type' <<< "${tag_object}")"
+          tag_sha="$(jq -r '.sha' <<< "${tag_object}")"
+          peel_depth=0
+          while [[ "${tag_type}" == "tag" ]]; do
+            peel_depth=$((peel_depth + 1))
+            if (( peel_depth > 16 )); then
+              printf 'Remote release tag exceeds the 16-object peel limit.\n' >&2
+              exit 1
+            fi
+            tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_sha}" --jq '.object')"
+            tag_type="$(jq -r '.type' <<< "${tag_object}")"
+            tag_sha="$(jq -r '.sha' <<< "${tag_object}")"
+          done
+          if [[ "${tag_type}" != "commit" || "${tag_sha}" != "${GITHUB_SHA}" ]]; then
+            printf 'Remote tag does not resolve to the workflow commit.\n' >&2
+            exit 1
+          fi
+
+      - name: Create draft release and upload five assets
+        id: draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          expected_assets=(
+            LICENSES.json
+            SBOM.spdx.json
+            SHA256SUMS
+            "prompt_smith-source-v${VERSION}.tar.gz"
+            "prompt_smith-web-v${VERSION}.tar.gz"
+          )
+          expected="$(printf '%s\n' "${expected_assets[@]}")"
+          actual="$(find candidate -mindepth 1 -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort)"
+          if [[ "${actual}" != "${expected}" ]]; then
+            printf 'Release candidate inventory is not exact.\n' >&2
+            exit 1
+          fi
+          (cd candidate && sha256sum --check --strict -- SHA256SUMS)
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            printf 'Release already exists: %s\n' "${RELEASE_TAG}" >&2
+            exit 1
+          fi
+
+          VERSION="${VERSION}" ruby -e '
+            version = ENV.fetch("VERSION")
+            lines = File.readlines("CHANGELOG.md", encoding: "UTF-8")
+            start = lines.index { |line| line.start_with?("## [#{version}] - ") }
+            abort "release notes section missing" unless start
+            body = lines[(start + 1)..].take_while { |line| !line.start_with?("## ") }
+            notes = body.join.strip
+            abort "release notes section is empty" if notes.empty?
+            File.write(ENV.fetch("RUNNER_TEMP") + "/release-notes.md", notes + "\n", encoding: "UTF-8")
+          '
+
+          version_without_build="${VERSION%%+*}"
+          prerelease=false
+          [[ "${version_without_build}" == *-* ]] && prerelease=true
+
+          release_pages="$(gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100")"
+          stale_draft_ids="$(jq -r \
+            --arg tag "${RELEASE_TAG}" \
+            --arg commit "${GITHUB_SHA}" \
+            --arg name "Prompt Smith ${RELEASE_TAG}" \
+            '.[][] | select(.draft == true and .tag_name == $tag and .target_commitish == $commit and .name == $name) | .id' \
+            <<< "${release_pages}")"
+          if [[ -n "${stale_draft_ids}" ]]; then
+            while IFS= read -r stale_draft_id; do
+              [[ "${stale_draft_id}" =~ ^[0-9]+$ ]] || {
+                printf 'Interrupted draft ID is invalid.\n' >&2
+                exit 1
+              }
+              stale_draft="$(gh api \
+                "repos/${GITHUB_REPOSITORY}/releases/${stale_draft_id}")"
+              jq -e \
+                --arg tag "${RELEASE_TAG}" \
+                --arg commit "${GITHUB_SHA}" \
+                --arg name "Prompt Smith ${RELEASE_TAG}" \
+                '.draft == true and .tag_name == $tag and .target_commitish == $commit and .name == $name' \
+                <<< "${stale_draft}" >/dev/null
+              gh api --method DELETE \
+                "repos/${GITHUB_REPOSITORY}/releases/${stale_draft_id}"
+            done <<< "${stale_draft_ids}"
+          fi
+
+          release_json="$(gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/releases" \
+            -f tag_name="${RELEASE_TAG}" \
+            -f target_commitish="${GITHUB_SHA}" \
+            -f name="Prompt Smith ${RELEASE_TAG}" \
+            -F body=@"${RUNNER_TEMP}/release-notes.md" \
+            -F draft=true \
+            -F prerelease="${prerelease}" \
+            -F generate_release_notes=false)"
+          release_id="$(jq -er '.id' <<< "${release_json}")"
+          echo "release_id=${release_id}" >> "${GITHUB_OUTPUT}"
+
+          assets=()
+          for asset in "${expected_assets[@]}"; do
+            assets+=("candidate/${asset}")
+          done
+          gh release upload "${RELEASE_TAG}" "${assets[@]}" \
+            --repo "${GITHUB_REPOSITORY}"
+
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}")"
+          jq -e \
+            --arg tag "${RELEASE_TAG}" \
+            --argjson prerelease "${prerelease}" \
+            '.tag_name == $tag and .draft == true and .prerelease == $prerelease and (.assets | length == 5)' \
+            <<< "${release_json}" >/dev/null
+          remote_names="$(jq -r '.assets[].name' <<< "${release_json}" | LC_ALL=C sort)"
+          if [[ "${remote_names}" != "${expected}" ]]; then
+            printf 'Remote release asset inventory is not exact.\n' >&2
+            exit 1
+          fi
+          for asset in "${expected_assets[@]}"; do
+            local_digest="sha256:$(sha256sum -- "candidate/${asset}" | cut -d ' ' -f 1)"
+            remote_digest="$(jq -er --arg name "${asset}" \
+              '.assets[] | select(.name == $name) | .digest' <<< "${release_json}")"
+            if [[ "${remote_digest}" != "${local_digest}" ]]; then
+              printf 'Remote release asset digest mismatch: %s\n' "${asset}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Verify remote tag commit before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object')"
+          outer_tag_type="$(jq -r '.type' <<< "${tag_object}")"
+          if [[ "${outer_tag_type}" != "tag" ]]; then
+            printf 'Remote release tag must remain annotated.\n' >&2
+            exit 1
+          fi
+          tag_type="$(jq -r '.type' <<< "${tag_object}")"
+          tag_sha="$(jq -r '.sha' <<< "${tag_object}")"
+          peel_depth=0
+          while [[ "${tag_type}" == "tag" ]]; do
+            peel_depth=$((peel_depth + 1))
+            if (( peel_depth > 16 )); then
+              printf 'Remote release tag exceeds the 16-object peel limit.\n' >&2
+              exit 1
+            fi
+            tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_sha}" --jq '.object')"
+            tag_type="$(jq -r '.type' <<< "${tag_object}")"
+            tag_sha="$(jq -r '.sha' <<< "${tag_object}")"
+          done
+          if [[ "${tag_type}" != "commit" || "${tag_sha}" != "${GITHUB_SHA}" ]]; then
+            printf 'Remote tag changed before release publication.\n' >&2
+            exit 1
+          fi
+
+      - name: Publish verified draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          gh api \
+            --method PATCH \
+            "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            -F draft=false \
+            --jq '.draft' | grep -qx false
+
+      - name: Remove failed release draft
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
+        run: |
+          set -uo pipefail
+          [[ "${RELEASE_ID}" =~ ^[0-9]+$ ]] || exit 0
+          release_json="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" 2>/dev/null)" || exit 0
+          if jq -e --arg tag "${RELEASE_TAG}" \
+            '.draft == true and .tag_name == $tag' <<< "${release_json}" >/dev/null; then
+            gh api --method DELETE \
+              "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}"
+          fi

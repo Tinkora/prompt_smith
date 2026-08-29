@@ -1,0 +1,35 @@
+name: Quality
+
+'on':
+  workflow_call:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    uses: Tinkora/.github/.github/workflows/reusable-rust-quality.yml@92df6f4d1a1f4d66fe605a0d30a81f3c2994ef99
+    permissions:
+      contents: read
+    with:
+      working-directory: .
+      toolchain: stable
+      locked: true
+      msrv: 1.85.0
+      coverage: true
+
+  wasm:
+    uses: Tinkora/.github/.github/workflows/reusable-wasm-quality.yml@92df6f4d1a1f4d66fe605a0d30a81f3c2994ef99
+    permissions:
+      contents: read
+    with:
+      working-directory: crates/prompt_smith_web
+      toolchain: stable
+      locked: true
+      playwright-smoke: true
+      node-version: '24'

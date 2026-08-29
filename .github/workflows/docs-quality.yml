@@ -1,0 +1,53 @@
+name: Documentation quality
+
+'on':
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: Documentation and repository contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Lint Markdown
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff
+
+      - name: Test repository checkers
+        run: |
+          ruby scripts/test_check_commit_policy.rb
+          ruby scripts/test_check_docs.rb
+          ruby scripts/test_check_workflow_contracts.rb
+
+      - name: Check repository contracts
+        run: |
+          ruby scripts/check_commit_policy.rb
+          ruby scripts/check_docs.rb
+          ruby scripts/check_workflow_contracts.rb
+
+      - name: Check shell and JavaScript syntax
+        run: |
+          bash -n scripts/*.sh
+          node --check crates/prompt_smith_web/static/assets/app.js
+          node --check crates/prompt_smith_web/tests/browser/preflight.spec.js
+
+      - name: Check GitHub Actions syntax
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7

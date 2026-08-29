@@ -1,0 +1,10 @@
+/target
+/pkg
+node_modules
+.playwright-cli/
+dist/
+output/
+crates/prompt_smith_web/smoke/
+crates/prompt_smith_web/static/pkg/
+crates/prompt_smith_web/test-results/
+crates/prompt_smith_web/playwright-report/

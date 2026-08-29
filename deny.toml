@@ -1,0 +1,27 @@
+[graph]
+all-features = true
+
+[advisories]
+unmaintained = "all"
+unsound = "all"
+yanked = "deny"
+
+[bans]
+multiple-versions = "warn"
+highlight = "all"
+
+[licenses]
+confidence-threshold = 0.93
+allow = [
+  "Apache-2.0",
+  "MIT",
+  "Unlicense",
+]
+exceptions = [
+  { allow = ["Unicode-3.0"], crate = "unicode-ident@1.0.24" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

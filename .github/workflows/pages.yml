@@ -1,0 +1,73 @@
+name: Pages
+
+'on':
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+    permissions:
+      contents: read
+
+  build:
+    name: Build Pages artifact
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: crates/prompt_smith_web/package-lock.json
+
+      - name: Install build dependencies
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --no-self-update
+          rustup target add wasm32-unknown-unknown --toolchain 1.95.0
+          cargo +1.95.0 install wasm-pack --version 0.15.0 --locked
+          npm ci --ignore-scripts --prefix crates/prompt_smith_web
+
+      - name: Build reviewed Pages distribution
+        env:
+          RUSTUP_TOOLCHAIN: 1.95.0
+        run: bash scripts/build_pages.sh
+
+      - name: Upload Pages source artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: prompt_smith_pages_${{ github.run_id }}
+          path: dist
+          if-no-files-found: error
+          include-hidden-files: true
+          overwrite: true
+          retention-days: 1
+
+  deploy:
+    name: Deploy Pages
+    needs: build
+    uses: Tinkora/.github/.github/workflows/reusable-pages.yml@92df6f4d1a1f4d66fe605a0d30a81f3c2994ef99
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    with:
+      source-artifact-name: prompt_smith_pages_${{ github.run_id }}
+      source-subdirectory: .

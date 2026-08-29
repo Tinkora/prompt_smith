@@ -11,9 +11,26 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 2
-    labels: [dependencies, rust]
+    commit-message:
+      prefix: "chore(deps)"
     groups:
       cargo-patch-minor:
+        update-types: [patch, minor]
+
+  - package-ecosystem: npm
+    directory: /crates/prompt_smith_web
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      npm-patch-minor:
         update-types: [patch, minor]
 
   - package-ecosystem: github-actions
@@ -26,7 +43,8 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 2
-    labels: [dependencies, ci]
+    commit-message:
+      prefix: "chore(deps)"
     groups:
       actions-patch-minor:
         update-types: [patch, minor]

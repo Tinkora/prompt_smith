@@ -1,76 +1,115 @@
-# prompt_smith
+# Prompt Smith
 
-[![CI](https://github.com/Tinkora/prompt_smith/actions/workflows/test.yml/badge.svg)](https://github.com/Tinkora/prompt_smith/actions/workflows/test.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
-[![Rust 1.95+](https://img.shields.io/badge/rust-1.95%2B-orange.svg)](https://www.rust-lang.org)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
+[简体中文](README.zh-CN.md)
 
-A browser-native LLM prompt template editor. Create prompt templates with `{{variable}}` placeholders, fill variables via form, preview the rendered prompt, estimate token count and cost for various models. All processing runs in-browser via WebAssembly.
+[![CI](https://github.com/Tinkora/prompt_smith/actions/workflows/quality.yml/badge.svg)](https://github.com/Tinkora/prompt_smith/actions/workflows/quality.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 
-## ✨ Features
+> Status: `v0.1.0-alpha.1` release candidate. The implementation and release
+> metadata target the Alpha dated 2026-08-15; publication is complete only
+> after CI, Pages, release assets, checksums, SBOM, and attestations are
+> verified.
 
-- 📝 **Template Editor** — Write prompt templates with `{{variable}}` placeholders with real-time syntax highlighting
-- 🔍 **Auto-Detection** — Variables are detected as you type and automatically surfaced in the variables panel
-- 🧩 **Variable Form** — Fill detected variables via input fields, textareas, or multi-line editors
-- 👁️ **Live Preview** — Rendered prompt updates in real-time as you type or change variable values
-- 📊 **Token Estimation** — Character-based BPE approximation estimating token counts for popular models
-- 💰 **Cost Calculation** — Estimate cost for GPT-4o, GPT-4o-mini, Claude 3.5 Sonnet, and more
-- 🎨 **Modern Dark UI** — Chinese-labeled interface with responsive split-panel layout
-- 🔒 **Privacy First** — All processing happens in-browser; no prompts leave your machine
-- 📋 **Copy & Download** — One-click copy rendered prompt or download as text/markdown
+Prompt Smith is a local prompt-template preflight checker. It catches missing
+values, unused values, malformed placeholders, and ambiguous literal braces
+before a prompt reaches an Agent framework.
 
-## 🚀 Quick Start
+The need is observable in real framework failures, including
+[LangChain #32702](https://github.com/langchain-ai/langchain/issues/32702) and
+[Langfuse #14721](https://github.com/langfuse/langfuse/issues/14721). Prompt
+Smith stays deliberately smaller than Promptfoo, Langfuse, or a template
+registry: it performs one strict check and render pass without an account,
+model call, or server.
 
-```bash
-# Clone
-git clone https://github.com/Tinkora/prompt_smith.git
-cd prompt_smith
+## Supported Syntax
 
-# Build Web WASM
-wasm-pack build --target web crates/prompt_smith_web
+| Dialect | Variable | Literal braces | Boundary |
+|---|---|---|---|
+| Simple double brace | `{{name}}` | Single braces are literal | Variable-only Tinkora syntax |
+| LangChain f-string subset | `{name}` | `{{` and `}}` | No positional, attribute, index, conversion, format, or nested fields |
 
-# Launch
-cp crates/prompt_smith_web/pkg/* crates/prompt_smith_web/static/pkg/
-cd crates/prompt_smith_web/static && python3 -m http.server 8080
-```
+Variable names match `[A-Za-z_][A-Za-z0-9_]*`. Rendering is strict and
+non-recursive: every referenced variable needs a supplied value, and inserted
+values are never parsed again as template syntax.
 
-Open `http://localhost:8080` in your browser.
+## Browser Workflow
 
-## 📂 Project Structure
+The application runs the Rust core through WebAssembly and provides:
 
-| Component | Description | Status |
-|-----------|-------------|--------|
-| `prompt_smith_core` | Template parsing, token counting, cost estimation | ✅ |
-| `prompt_smith_web` | WASM bridge + HTML editor UI | ✅ |
-| `skills/` | Agent Skill definition (MCP tools) | ✅ |
+- dialect selection;
+- unique variable fields in first-seen order;
+- stable diagnostics with severity and byte offset;
+- strict local render preview;
+- English and Chinese interfaces;
+- copy and text download commands.
 
-## 🔧 Development
+Open the deployed application at
+[tinkora.github.io/prompt_smith](https://tinkora.github.io/prompt_smith/) after
+the Pages workflow is published.
+
+## Privacy and Resource Boundaries
+
+- Templates and values remain in browser memory.
+- The application makes no runtime request after same-origin assets load.
+- It does not call an LLM, execute template code, read environment variables,
+  persist input, or provide cloud synchronization.
+- Diagnostics never contain variable values.
+
+Limits are inclusive and measured as UTF-8 bytes. Resource failures prevent a
+rendered preview.
+
+| Boundary | Limit | Failure contract |
+|---|---:|---|
+| Template | 256 KiB | `template_too_large` error |
+| Unique template variables | 200 | `too_many_variables` error |
+| Each supplied value | 256 KiB | `value_too_large` error naming only the variable |
+| Values JSON passed to WASM | 1 MiB and 200 object entries | Bridge error before a report is produced |
+| Rendered output | 1 MiB | `rendered_output_too_large` error and no output |
+
+Prompt Smith does not estimate tokens or model cost, evaluate prompt quality,
+provide a registry, or expose MCP tools.
+
+## Local Development
+
+Requirements: Rust 1.85 or newer, the `wasm32-unknown-unknown` target,
+`wasm-pack 0.15`, and Node.js 24.
 
 ```bash
 cargo fmt --all -- --check
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo check -p prompt_smith_web --target wasm32-unknown-unknown
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo check -p prompt_smith_web --target wasm32-unknown-unknown --locked
+
+cd crates/prompt_smith_web
+npm ci --ignore-scripts
+npm run build:wasm
+npm run test:wasm-smoke
 ```
 
-## 📄 Docs
+To inspect the built page manually:
 
-- [Product Spec (zh-CN)](docs/product_spec.zh-CN.md)
+```bash
+cd crates/prompt_smith_web/static
+python3 -m http.server 8080 --bind 127.0.0.1
+```
 
-## 🤝 Community
+Then open `http://127.0.0.1:8080`.
 
-- [Contributing](./CONTRIBUTING.md)
-- [Code of Conduct](./CODE_OF_CONDUCT.md)
-- [Security](./SECURITY.md)
-- [Changelog](./CHANGELOG.md)
+## Documentation
 
-## Support
+- [Product specification](docs/PRODUCT_SPEC.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Support](SUPPORT.md)
+- [Changelog](CHANGELOG.md)
 
-If prompt_smith saves you time, support Tinkora on [Ko-fi](https://ko-fi.com/tinkora).
-Support is optional and never affects access or issue priority.
+## Support Tinkora
 
-See [SUPPORT.md](./SUPPORT.md) for questions, bug reports, and security reports.
+If Prompt Smith saves you time, you can support continued maintenance on
+[Ko-fi](https://ko-fi.com/tinkora). Support is optional and never affects
+access or issue priority.
 
-## 📜 License
+## License
 
-MIT © [Tinkora](https://github.com/Tinkora)
+MIT

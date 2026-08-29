@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Local prompt template preflight for strict variable contracts and render previews."
+    >
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    >
+    <title>Prompt Smith</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="./assets/styles.css">
+    <script type="module" src="./assets/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace" data-i18n="skip">Skip to workspace</a>
+
+    <header class="app-header">
+      <div class="brand-block">
+        <h1>Prompt Smith</h1>
+        <span data-i18n="productLabel">Template preflight</span>
+      </div>
+      <div class="header-actions">
+        <a href="https://github.com/Tinkora/prompt_smith" data-i18n="repository">Repository</a>
+        <a href="https://ko-fi.com/tinkora">Ko-fi</a>
+        <button id="locale-toggle" class="button button-quiet" type="button" aria-label="切换到中文">
+          中文
+        </button>
+      </div>
+    </header>
+
+    <div class="control-bar">
+      <fieldset class="dialect-control">
+        <legend data-i18n="dialectLegend">Template dialect</legend>
+        <div class="segments">
+          <label>
+            <input type="radio" name="dialect" value="simple_double_brace" checked>
+            <span data-i18n="simpleDialect">Simple {{variable}}</span>
+          </label>
+          <label>
+            <input type="radio" name="dialect" value="langchain_f_string">
+            <span data-i18n="langchainDialect">LangChain f-string subset</span>
+          </label>
+        </div>
+      </fieldset>
+      <div class="control-actions">
+        <button id="example-button" class="button button-primary" type="button" data-i18n="example">
+          Use example
+        </button>
+        <button id="reset-button" class="button button-quiet" type="button" data-i18n="reset">
+          Reset
+        </button>
+      </div>
+    </div>
+
+    <main id="workspace" class="workspace-grid">
+      <section class="panel template-panel" aria-labelledby="template-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker" data-i18n="source">Source</p>
+            <h2 id="template-heading" data-i18n="templateHeading">Prompt template</h2>
+          </div>
+          <output id="template-size" class="panel-count">0 B</output>
+        </div>
+        <label class="sr-only" for="template-input" data-i18n="templateLabel">Prompt template</label>
+        <textarea
+          id="template-input"
+          class="code-input"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="Enter a template..."
+        ></textarea>
+      </section>
+
+      <section class="panel variables-panel" aria-labelledby="variables-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker" data-i18n="inputs">Inputs</p>
+            <h2 id="variables-heading" data-i18n="variablesHeading">Variables</h2>
+          </div>
+          <output id="variable-count" class="panel-count">0</output>
+        </div>
+        <div id="variables-list" class="variables-list" aria-live="polite"></div>
+      </section>
+
+      <section class="panel result-panel" aria-labelledby="result-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker" data-i18n="result">Result</p>
+            <h2 id="result-heading" data-i18n="resultHeading">Preflight report</h2>
+          </div>
+        </div>
+
+        <div id="preflight-status" class="preflight-status" role="status" aria-label="Preflight result">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="preflight-status-text">Needs attention</span>
+        </div>
+
+        <ol id="findings-list" class="findings-list" aria-live="polite"></ol>
+
+        <label class="output-label" for="rendered-output" data-i18n="renderedLabel">
+          Rendered prompt
+        </label>
+        <textarea id="rendered-output" class="code-output" readonly></textarea>
+
+        <div class="result-actions">
+          <button id="copy-button" class="button button-primary" type="button" disabled data-i18n="copy">
+            Copy output
+          </button>
+          <button id="download-button" class="button button-quiet" type="button" disabled data-i18n="download">
+            Download .txt
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span>MIT &copy; Tinkora</span>
+      <a href="https://github.com/Tinkora/prompt_smith/blob/main/README.zh-CN.md">中文文档</a>
+    </footer>
+
+    <div id="application-status" class="sr-only" role="status" aria-label="Application status">
+      Loading
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
