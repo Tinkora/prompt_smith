@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Fixed
+
+- Honor the shared CI browser executable path for Playwright smoke tests.
+
 ## [0.1.0-alpha.1] - 2026-08-15
 
 ### Added

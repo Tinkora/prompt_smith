@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 
-> Status: `v0.1.0-alpha.1` release candidate. The implementation and release
+> Status: `v0.1.0-alpha.2` release candidate. The implementation and release
 > metadata target the Alpha dated 2026-08-15; publication is complete only
 > after CI, Pages, release assets, checksums, SBOM, and attestations are
 > verified.

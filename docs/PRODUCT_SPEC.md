@@ -165,6 +165,6 @@ scripts/                   documentation, browser, and release contract checks
 - Published claims match the supported subset and never imply full framework
   compatibility.
 - English is the default README and UI; complete Chinese README/spec links exist.
-- Package metadata and release notes remain aligned to `v0.1.0-alpha.1`; CI,
+- Package metadata and release notes remain aligned to `v0.1.0-alpha.2`; CI,
   Pages, checksums, SBOM, provenance, and SBOM attestations are verified from the
   release assets before the Alpha is recorded as published.

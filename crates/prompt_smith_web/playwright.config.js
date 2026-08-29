@@ -23,6 +23,9 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${testPort}`,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
+    launchOptions: process.env.BROWSER_EXECUTABLE_PATH
+      ? { executablePath: process.env.BROWSER_EXECUTABLE_PATH }
+      : undefined,
   },
   webServer: {
     command: `npx --no-install http-server smoke -a 127.0.0.1 -p ${testPort} -c-1 --silent`,
